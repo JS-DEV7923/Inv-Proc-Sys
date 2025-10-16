@@ -229,7 +229,7 @@ export const useDocStore = create<State & Actions>((set, get) => ({
 
     openUploadSSE({
       onProgress: (data) => {
-        const { uploadId, documentId, progress } = data || {};
+        const { uploadId, progress } = data || {};
         if (!uploadId) return;
         // try to find local upload by scanning (since mapping is per session)
         const s = get();
