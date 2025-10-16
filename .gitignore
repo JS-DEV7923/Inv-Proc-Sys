@@ -1,0 +1,35 @@
+# Node / JS
+node_modules/
+.pnpm-store/
+.yarn/
+.npm/
+
+# Builds
+**/dist/
+**/build/
+**/.vite/
+**/.next/
+**/.turbo/
+**/coverage/
+
+# Env & local config
+*.env
+**/.env
+**/.env.local
+**/.env.*.local
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
+
+# Misc
+*.local
+*.cache
+
+# Project specific
+inv-proc-ui/api-gateway/.env
+inv-proc-ui/backend-core/.env
+inv-proc-ui/frontend/.env

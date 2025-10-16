@@ -1,0 +1,42 @@
+{
+  "name": "inv-proc-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts,json --exec ts-node src/index.ts",
+    "build": "tsc -p .",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@types/connect-redis": "^0.0.23",
+    "bullmq": "^5.61.0",
+    "connect-redis": "^9.0.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "csurf": "^1.11.0",
+    "express": "^5.1.0",
+    "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.1",
+    "minio": "^8.0.6",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "redis": "^5.8.3",
+    "uuid": "^13.0.0",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/csurf": "^1.11.5",
+    "@types/express": "^5.0.3",
+    "@types/express-session": "^1.18.2",
+    "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.7.2",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

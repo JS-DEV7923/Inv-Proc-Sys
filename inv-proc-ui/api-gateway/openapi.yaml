@@ -1,0 +1,290 @@
+openapi: 3.0.3
+info:
+  title: Invoice Processing API Gateway
+  version: 0.1.0
+servers:
+  - url: http://localhost:4000/api/v1
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200': { description: OK }
+  /csrf:
+    get:
+      summary: Get CSRF token
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrfToken: { type: string, nullable: true }
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+              required: [email, password]
+      responses:
+        '200': { description: OK }
+  /auth/signup:
+    post:
+      summary: Signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 6 }
+              required: [name, email, password]
+      responses:
+        '201': { description: Created }
+  /auth/logout:
+    post:
+      summary: Logout
+      responses:
+        '204': { description: No Content }
+  /auth/me:
+    get:
+      summary: Current user
+      responses:
+        '200': { description: OK }
+  /uploads:
+    get:
+      summary: List active uploads
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create upload
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required: [file]
+      responses:
+        '201': { description: Created }
+  /uploads/{id}:
+    get:
+      summary: Get upload status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /uploads/stream:
+    get:
+      summary: SSE for upload progress
+      responses:
+        '200': { description: OK }
+  /documents:
+    get:
+      summary: List documents
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [Pending, Processed, Error] }
+        - in: query
+          name: type
+          schema: { type: string, enum: [Invoice] }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - in: query
+          name: sort
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /documents/{id}:
+    get:
+      summary: Get a document
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    patch:
+      summary: Update a document
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentPatch'
+      responses:
+        '200': { description: OK }
+  /documents/{id}/approve:
+    post:
+      summary: Approve a document
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /documents/{id}/reject:
+    post:
+      summary: Reject a document
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: OK }
+  /analytics/overview:
+    get:
+      summary: Overview metrics
+      responses:
+        '200': { description: OK }
+  /analytics/documents-per-day:
+    get:
+      summary: Documents per day
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        '200': { description: OK }
+  /settings:
+    get:
+      summary: Get settings
+      responses:
+        '200': { description: OK }
+    patch:
+      summary: Update settings
+      responses:
+        '200': { description: OK }
+  /integrations:
+    get:
+      summary: Get integrations
+      responses:
+        '200': { description: OK }
+    patch:
+      summary: Update integrations
+      responses:
+        '200': { description: OK }
+  /users:
+    get:
+      summary: List users
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create user
+      responses:
+        '201': { description: Created }
+  /users/{id}:
+    patch:
+      summary: Update user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: Delete user
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /subscriptions:
+    post:
+      summary: Subscribe to newsletter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email }
+              required: [email]
+      responses:
+        '202': { description: Accepted }
+  /internal/events:
+    post:
+      summary: INTERNAL ONLY: Broadcast worker events to clients
+      description: This endpoint is for backend workers to push SSE events via the gateway. Protected with a shared secret header.
+      parameters:
+        - in: header
+          name: x-internal-secret
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: { type: string }
+                event: { type: string, enum: [progress, completed, error] }
+                data: { type: object }
+              required: [userId, event]
+      responses:
+        '202': { description: Accepted }
+components:
+  schemas:
+    DocumentPatch:
+      type: object
+      properties:
+        invoiceId: { type: string }
+        vendor: { type: string }
+        date: { type: string, format: date }
+        total: { type: number }
+        lineItems:
+          type: array
+          items:
+            type: object
+            properties:
+              item: { type: string }
+              qty: { type: integer }
+              price: { type: number }
