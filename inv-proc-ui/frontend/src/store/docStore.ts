@@ -93,18 +93,19 @@ export const useDocStore = create<State & Actions>((set, get) => ({
       const isImage = file.type.startsWith("image/");
       const previewUrl = isImage ? URL.createObjectURL(file) : undefined;
       set((s) => {
-        const uploads = {
+        const newUpload: UploadItem = {
+          id: localId,
+          name: file.name,
+          type: "Invoice",
+          file,
+          progress: 0,
+          status: "Pending",
+          uploadedAt: now.toISOString(),
+          previewUrl,
+        };
+        const uploads: Record<string, UploadItem> = {
           ...s.uploads,
-          [localId]: {
-            id: localId,
-            name: file.name,
-            type: "Invoice",
-            file,
-            progress: 0,
-            status: "Pending",
-            uploadedAt: now.toISOString(),
-            previewUrl,
-          },
+          [localId]: newUpload,
         };
         const state = { ...s, uploads };
         persist(state);

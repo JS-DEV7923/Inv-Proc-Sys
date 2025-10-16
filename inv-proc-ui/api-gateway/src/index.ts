@@ -22,7 +22,13 @@ const app = express()
 
 app.use(helmet())
 app.use(morgan('dev'))
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }))
+const corsOrigin = Array.isArray(env.CORS_ORIGIN)
+  ? env.CORS_ORIGIN
+  : String(env.CORS_ORIGIN)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+app.use(cors({ origin: corsOrigin, credentials: true }))
 app.use(cookieParser())
 app.use(sessionMiddleware)
 app.use(express.json({ limit: '5mb' }))
@@ -63,9 +69,11 @@ app.use('/api/v1/internal', internalRouter)
 // Heartbeat for SSE clients
 setInterval(() => heartbeat(), 30000)
 
-ensureBucket()
-  .then(() => console.log('[api] MinIO bucket ensured'))
-  .catch((e) => console.error('[api] MinIO ensureBucket error', e))
+if (env.NODE_ENV !== 'production') {
+  ensureBucket()
+    .then(() => console.log('[api] MinIO bucket ensured'))
+    .catch((e) => console.error('[api] MinIO ensureBucket error', e))
+}
 
 app.listen(env.PORT, () => {
   console.log(`[api] listening on http://localhost:${env.PORT}`)
