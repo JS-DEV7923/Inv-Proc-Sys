@@ -1,0 +1,225 @@
+import { 
+  Document, 
+  UploadResponse, 
+  UploadProgress, 
+  PaginatedResponse, 
+  ApiResponse, 
+  DocumentEvent,
+  DocumentsResponse,
+  DocumentResponse
+} from '../types/api';
+
+const BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000/api/v1';
+
+// Cache for CSRF token
+let csrfToken: string | null = null;
+
+async function getCsrfToken(): Promise<string> {
+  if (csrfToken) return csrfToken;
+  
+  try {
+    const response = await fetch(`${BASE_URL}/csrf`, { 
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch CSRF token');
+    }
+
+    const data = await response.json();
+    csrfToken = data?.csrfToken || null;
+    return csrfToken || '';
+  } catch (error) {
+    console.error('Error fetching CSRF token:', error);
+    return '';
+  }
+}
+
+async function fetchWithAuth<T>(
+  url: string, 
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+  const token = await getCsrfToken();
+  const headers = new Headers(options.headers);
+  
+  if (token) {
+    headers.set('x-csrf-token', token);
+  }
+  
+  headers.set('Content-Type', 'application/json');
+  headers.set('Accept', 'application/json');
+
+  try {
+    const response = await fetch(`${BASE_URL}${url}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
+
+    const data = await response.json().catch(() => ({}));
+    
+    if (!response.ok) {
+      throw {
+        message: data.message || 'An error occurred',
+        code: data.code,
+        details: data.details,
+        statusCode: response.status,
+      };
+    }
+
+    return { data, success: true };
+  } catch (error) {
+    console.error(`API Error [${options.method || 'GET'} ${url}]:`, error);
+    return { 
+      error: error as any, 
+      success: false 
+    };
+  }
+}
+
+// Document API
+export const documentApi = {
+  // Upload a new document
+  async upload(file: File, metadata?: Record<string, any>): Promise<ApiResponse<UploadResponse>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    if (metadata) {
+      formData.append('metadata', JSON.stringify(metadata));
+    }
+
+    const token = await getCsrfToken();
+    const headers: Record<string, string> = {};
+    
+    if (token) {
+      headers['x-csrf-token'] = token;
+    }
+
+    return fetchWithAuth<UploadResponse>('/documents/upload', {
+      method: 'POST',
+      body: formData,
+      headers,
+    });
+  },
+
+  // Get paginated list of documents
+  async list(page = 1, limit = 10): Promise<ApiResponse<PaginatedResponse<Document>>> {
+    return fetchWithAuth<PaginatedResponse<Document>>(
+      `/documents?page=${page}&limit=${limit}`
+    );
+  },
+
+  // Get a single document by ID
+  async getById(id: string): Promise<ApiResponse<Document>> {
+    return fetchWithAuth<Document>(`/documents/${id}`);
+  },
+
+  // Update a document
+  async update(
+    id: string, 
+    updates: { status?: string; metadata?: Record<string, any> }
+  ): Promise<ApiResponse<Document>> {
+    return fetchWithAuth<Document>(`/documents/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  },
+
+  // Delete a document
+  async delete(id: string): Promise<ApiResponse<void>> {
+    return fetchWithAuth<void>(`/documents/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Subscribe to document events
+  subscribe(
+    documentId: string,
+    handlers: {
+      onProgress?: (progress: UploadProgress) => void;
+      onUpdate?: (document: Document) => void;
+      onError?: (error: Error) => void;
+      onComplete?: (document: Document) => void;
+    }
+  ): () => void {
+    const eventSource = new EventSource(
+      `${BASE_URL}/documents/${documentId}/events`,
+      { withCredentials: true }
+    );
+
+    eventSource.onmessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data) as DocumentEvent;
+        
+        switch (data.type) {
+          case 'UPLOAD_PROGRESS':
+            handlers.onProgress?.(data.data);
+            break;
+            
+          case 'DOCUMENT_UPDATED':
+            handlers.onUpdate?.(data.data);
+            break;
+            
+          case 'DOCUMENT_PROCESSED':
+            handlers.onComplete?.(data.data);
+            eventSource.close();
+            break;
+            
+          case 'ERROR':
+            handlers.onError?.(data.error);
+            eventSource.close();
+            break;
+        }
+      } catch (error) {
+        console.error('Error processing SSE message:', error);
+        handlers.onError?.(error as Error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE Error:', error);
+      handlers.onError?.(new Error('Connection error'));
+      eventSource.close();
+    };
+
+    // Return cleanup function
+    return () => {
+      eventSource.close();
+    };
+  },
+};
+
+// Export for backward compatibility
+export const uploadFile = documentApi.upload;
+export const fetchDocuments = documentApi.list;
+
+export async function approveDocumentApi(id: string) {
+  return documentApi.update(id, { status: 'APPROVED' });
+}
+
+export async function rejectDocumentApi(id: string, reason?: string) {
+  return documentApi.update(id, { 
+    status: 'REJECTED',
+    metadata: { rejectionReason: reason }
+  });
+}
+
+export async function fetchAnalyticsOverview() {
+  return fetchWithAuth<{
+    totalDocuments: number;
+    processed: number;
+    pending: number;
+    error: number;
+  }>('/analytics/overview');
+}
+
+export async function fetchDocumentsPerDay(params: { from?: string; to?: string } = {}) {
+  const query = new URLSearchParams();
+  if (params.from) query.append('from', params.from);
+  if (params.to) query.append('to', params.to);
+  
+  return fetchWithAuth<Array<{ date: string; count: number }>>(
+    `/analytics/documents-per-day?${query.toString()}`
+  );
+}

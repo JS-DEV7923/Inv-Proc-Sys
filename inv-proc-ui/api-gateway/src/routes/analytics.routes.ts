@@ -5,18 +5,54 @@ const router = Router()
 
 // GET /analytics/overview
 router.get('/overview', async (_req, res) => {
-  const docs = allDocuments()
-  const now = new Date()
-  const todayStr = now.toISOString().slice(0, 10)
-  let processed = 0, pending = 0, errors = 0, today = 0
-  for (const d of docs) {
-    if (d.status === 'Processed') processed++
-    else if (d.status === 'Pending') pending++
-    else if (d.status === 'Error') errors++
-    const dDate = new Date(d.updatedAt).toISOString().slice(0, 10)
-    if (dDate === todayStr) today++
+  try {
+    const docs = allDocuments()
+    console.log(`Found ${docs.length} total documents`)
+    
+    const now = new Date()
+    const todayStr = now.toISOString().split('T')[0] // YYYY-MM-DD format
+    
+    let processed = 0, pending = 0, errors = 0, today = 0
+    
+    type DocumentStatus = 'Processed' | 'Pending' | 'Processing' | 'Error' | 'Failed';
+    
+    docs.forEach(doc => {
+      const status = (doc.status as DocumentStatus) || 'Pending';
+      console.log(`Document ${doc.id}: status=${status}, updatedAt=${doc.updatedAt}`);
+      
+      // Count by status
+      if (status === 'Processed') processed++
+      else if (status === 'Pending' || status === 'Processing') pending++
+      else if (status === 'Error' || status === 'Failed') errors++
+      
+      // Count today's documents
+      if (doc.updatedAt) {
+        const docDate = new Date(doc.updatedAt).toISOString().split('T')[0]
+        if (docDate === todayStr) today++
+      }
+    })
+    
+    console.log(`Analytics overview: processed=${processed}, pending=${pending}, errors=${errors}, today=${today}`)
+    
+    return res.json({ 
+      success: true,
+      data: {
+        processed,
+        pending,
+        errors,
+        today
+      },
+      total: docs.length
+    })
+  } catch (error: unknown) {
+    console.error('Error in analytics overview:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch analytics data',
+      details: errorMessage
+    });
   }
-  return res.json({ processed, pending, errors, today })
 })
 
 // GET /analytics/documents-per-day

@@ -1,0 +1,132 @@
+import { useCallback, useMemo, useState } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { FileText, Upload as UploadIcon, X } from 'lucide-react';
+import { useDocStore } from '@/store/docStore';
+
+const ACCEPTED = {
+  'application/pdf': ['.pdf'],
+  'image/png': ['.png'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/jpg': ['.jpg'],
+};
+
+export default function Upload() {
+  const enqueueUploads = useDocStore((s) => s.enqueueUploads);
+  const uploads = useDocStore((s) => Object.values(s.uploads));
+  const [isDragging, setIsDragging] = useState(false);
+
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      setIsDragging(false);
+      if (!acceptedFiles?.length) return;
+      enqueueUploads(acceptedFiles);
+    },
+    [enqueueUploads]
+  );
+
+  const { getRootProps, getInputProps } = useDropzone({
+    onDrop,
+    accept: ACCEPTED,
+    multiple: true,
+    onDragEnter: () => setIsDragging(true),
+    onDragLeave: () => setIsDragging(false),
+    maxSize: 10 * 1024 * 1024, // 10MB
+  });
+
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith('image/')) {
+      return <img 
+        src={URL.createObjectURL(file)} 
+        alt="Preview" 
+        className="w-10 h-10 object-cover rounded"
+      />;
+    }
+    return <FileText className="w-5 h-5" />;
+  };
+
+  return (
+    <main className="container mx-auto p-4 max-w-4xl">
+      <h1 className="text-2xl font-bold mb-6">Upload Documents</h1>
+
+      <div
+        {...getRootProps()}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
+        }`}
+      >
+        <input {...getInputProps()} />
+        <div className="space-y-2">
+          <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+            <UploadIcon className="w-6 h-6 text-blue-500" />
+          </div>
+          <h2 className="text-lg font-medium">Drag & drop files here</h2>
+          <p className="text-sm text-gray-500">
+            or click to browse files (PDF, PNG, JPG up to 10MB)
+          </p>
+          <Button type="button" variant="outline" className="mt-2">
+            Select Files
+          </Button>
+        </div>
+      </div>
+
+      {uploads.length > 0 && (
+        <div className="mt-8 space-y-4">
+          <h2 className="text-lg font-medium">
+            Uploading {uploads.length} file{uploads.length !== 1 ? 's' : ''}
+          </h2>
+          <div className="space-y-4">
+            {uploads.map((upload) => (
+              <div key={upload.id} className="border rounded-lg p-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 bg-gray-100 rounded-md flex items-center justify-center">
+                    {upload.previewUrl ? (
+                      <img 
+                        src={upload.previewUrl} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover rounded-md"
+                      />
+                    ) : (
+                      getFileIcon(upload.file)
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex justify-between">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {upload.name}
+                      </p>
+                      <span className="text-sm text-gray-500">
+                        {upload.progress}%
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <Progress 
+                        value={upload.progress} 
+                        className="h-2" 
+                        indicatorClassName={
+                          upload.status === 'Error' 
+                            ? 'bg-red-500' 
+                            : upload.status === 'Processed' 
+                              ? 'bg-green-500' 
+                              : ''
+                        }
+                      />
+                    </div>
+                    <div className="mt-1 flex justify-between text-xs text-gray-500">
+                      <span>
+                        {upload.status}
+                        {upload.error && `: ${upload.error}`}
+                      </span>
+                      <span>{Math.round(upload.file.size / 1024)} KB</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

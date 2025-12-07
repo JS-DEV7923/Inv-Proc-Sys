@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useMemo, useEffect, useState } from "react";
+import { useMemo, useEffect, useState, useCallback } from "react";
 import { Button } from "../components/ui/button";
 import { useDocStore } from "../store/docStore";
 import { fetchAnalyticsOverview } from "../lib/api";
@@ -8,23 +8,48 @@ export default function Dashboard() {
   const documents = useDocStore((s) => s.documents);
   const uploads = useDocStore((s) => s.uploads);
   const loadDocuments = useDocStore((s) => s.loadDocuments);
-  const [overview, setOverview] = useState<{ processed: number; pending: number; errors: number; today: number } | null>(null)
+  const [overview, setOverview] = useState<{ processed: number; pending: number; errors: number; today: number }>({ 
+    processed: 0, 
+    pending: 0, 
+    errors: 0, 
+    today: 0 
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
   const docs = useMemo(() => Object.values(documents), [documents]);
-  const recent = useMemo(
-    () => docs.slice().sort((a, b) => (a.uploadedAt > b.uploadedAt ? -1 : 1)).slice(0, 10),
+  const recent = useMemo(() => 
+    docs
+      .slice()
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+      .slice(0, 10),
     [docs]
   );
-  const totalProcessed = overview?.processed ?? 0
-  const pending = overview?.pending ?? Object.keys(uploads).length
-  const errors = overview?.errors ?? 0
-  const today = overview?.today ?? 0
+  
+  const totalProcessed = overview.processed;
+  const pending = overview.pending + Object.keys(uploads).length;
+  const errors = overview.errors;
+  const today = overview.today;
+
+  const loadAnalytics = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const data = await fetchAnalyticsOverview();
+      setOverview(data);
+    } catch (error) {
+      console.error('Failed to load analytics:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadDocuments();
-    // fetch backend analytics overview
-    fetchAnalyticsOverview().then(setOverview).catch(() => {})
-  }, [loadDocuments]);
+    loadAnalytics();
+    
+    // Refresh analytics every 30 seconds
+    const interval = setInterval(loadAnalytics, 30000);
+    return () => clearInterval(interval);
+  }, [loadDocuments, loadAnalytics]);
 
   return (
     <main className="relative mx-auto max-w-7xl p-4">
@@ -53,26 +78,40 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {recent.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <Td className="truncate">{r.name}</Td>
-                  <Td>{r.type}</Td>
-                  <Td><StatusPill status={r.status} /></Td>
-                  <Td>{r.uploadedAt.slice(0,10)}</Td>
+              {recent.length === 0 ? (
+            <tr>
+              <td colSpan={5} className="p-4 text-center text-foreground/60">No documents yet.</td>
+            </tr>
+          ) : (
+            recent.map((doc) => {
+              // Map document status to one of the allowed values
+              const status = doc.status === 'Processing' ? 'Pending' : doc.status;
+              
+              return (
+                <tr key={doc.id} className="border-t hover:bg-secondary/50">
+                  <Td className="font-medium">
+                    <Link to={`/documents/${doc.id}`} className="hover:underline">
+                      {doc.name}
+                    </Link>
+                  </Td>
+                  <Td>{doc.type}</Td>
                   <Td>
-                    {r.status !== "Pending" ? (
-                      <Link to={`/review/${encodeURIComponent(r.id)}`} className="font-semibold text-amber-900 hover:underline">View</Link>
+                    <StatusPill status={status as 'Processed' | 'Pending' | 'Error'} />
+                  </Td>
+                  <Td className="text-muted-foreground">
+                    {new Date(doc.uploadedAt).toLocaleDateString()}
+                  </Td>
+                  <Td>
+                    {status !== "Pending" ? (
+                      <Link to={`/review/${encodeURIComponent(doc.id)}`} className="font-semibold text-amber-900 hover:underline">View</Link>
                     ) : (
                       <span className="text-foreground/60">Processing…</span>
                     )}
                   </Td>
                 </tr>
-              ))}
-              {!recent.length && (
-                <tr>
-                  <td colSpan={5} className="p-4 text-center text-foreground/60">No documents yet.</td>
-                </tr>
-              )}
+              );
+            })
+          )}
             </tbody>
           </table>
         </div>
